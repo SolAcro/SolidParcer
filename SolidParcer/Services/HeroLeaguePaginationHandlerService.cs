@@ -5,9 +5,8 @@ using SolidParcer.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace SolidParcer.Services
 {
@@ -31,6 +30,7 @@ namespace SolidParcer.Services
                 var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
                 wait.Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
 
+                // Прокрутка для подгрузки всех строк
                 int lastCount = 0, stableCount = 0;
                 while (stableCount < 3)
                 {
@@ -46,24 +46,54 @@ namespace SolidParcer.Services
                 }
 
                 var pageRows = driver.FindElements(By.CssSelector("div._tr_1boqa_9"));
+                if (!pageRows.Any()) break;
                 Console.WriteLine($"  Собрано строк на странице {currentPage}: {pageRows.Count}");
 
+                // --- Определяем индексы колонок по data-label первой строки ---
+                var firstRowCells = pageRows.First().FindElements(By.CssSelector("div._td_1boqa_77")).ToList();
+                if (firstRowCells.Count < 5) break;
+
+                int idxNumber = -1, idxFirstName = -1, idxLastName = -1, idxOfficialTime = -1, idxStatus = -1, idxCategory = -1;
+                for (int i = 0; i < firstRowCells.Count; i++)
+                {
+                    string label = firstRowCells[i].GetAttribute("data-label") ?? "";
+                    if (label.Contains("Номер")) idxNumber = i;
+                    else if (label.Contains("Имя")) idxFirstName = i;
+                    else if (label.Contains("Фамилия")) idxLastName = i;
+                    else if (label.Contains("Время официальное")) idxOfficialTime = i;
+                    else if (label.Contains("Статус")) idxStatus = i;
+                    else if (label.Contains("Категория")) idxCategory = i;
+                }
+
+                // Fallback, если data-label не сработал (страховка)
+                if (idxNumber == -1) idxNumber = 0;
+                if (idxFirstName == -1) idxFirstName = 1;
+                if (idxLastName == -1) idxLastName = 2;
+                if (idxOfficialTime == -1) idxOfficialTime = (firstRowCells.Count == 8) ? 3 : 4;
+                if (idxStatus == -1) idxStatus = (firstRowCells.Count == 8) ? 5 : 6;
+                if (idxCategory == -1) idxCategory = (firstRowCells.Count == 8) ? 7 : 3;
+
+                // --- Парсим все строки ---
                 foreach (var row in pageRows)
                 {
                     var cells = row.FindElements(By.CssSelector("div._td_1boqa_77")).ToList();
-                    if (cells.Count < 7) continue;
+                    int maxIdx = new[] { idxNumber, idxFirstName, idxLastName, idxOfficialTime, idxStatus, idxCategory }.Max();
+                    if (cells.Count <= maxIdx)
+                        continue;
 
                     var record = new ParticipantRecord
                     {
-                        Number = cells[0].Text.Trim(),
-                        FirstName = cells[1].Text.Trim(),
-                        LastName = cells[2].Text.Trim(),
-                        OfficialTime = NormalizeHeroleagueTime(cells[3].Text.Trim()),
-                        Status = cells[6].Text.Trim()
+                        Number = cells[idxNumber].Text.Trim(),
+                        FirstName = cells[idxFirstName].Text.Trim(),
+                        LastName = cells[idxLastName].Text.Trim(),
+                        OfficialTime = NormalizeHeroleagueTime(idxOfficialTime >= 0 && idxOfficialTime < cells.Count ? cells[idxOfficialTime].Text.Trim() : ""),
+                        Status = NormalizeStatus(idxStatus >= 0 && idxStatus < cells.Count ? cells[idxStatus].Text.Trim() : ""),
+                        Category = idxCategory >= 0 && idxCategory < cells.Count ? cells[idxCategory].Text.Trim() : ""
                     };
                     allRecords.Add(record);
                 }
 
+                // --- Обработка пагинации ---
                 if (!TryGoToNextPage(driver, currentPage, out int newPage))
                     break;
                 currentPage = newPage;
@@ -72,10 +102,36 @@ namespace SolidParcer.Services
             return allRecords;
         }
 
+        private string NormalizeHeroleagueTime(string time)
+        {
+            if (string.IsNullOrEmpty(time)) return "";
+            string cleaned = Regex.Replace(time, @"[^0-9:]", "");
+            var parts = cleaned.Split(':', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return "";
+            if (parts.Length == 3)
+                return $"{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}:{parts[2].PadLeft(2, '0')}.00";
+            else if (parts.Length == 2)
+                return $"00:{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}.00";
+            else if (parts.Length == 1)
+                return $"00:00:{parts[0].PadLeft(2, '0')}.00";
+            else
+                return cleaned;
+        }
+
+        private string NormalizeStatus(string status)
+        {
+            if (string.IsNullOrWhiteSpace(status)) return "finished";
+            if (status.Equals("finished", StringComparison.OrdinalIgnoreCase)) return "finished";
+            if (status.Equals("disqualified", StringComparison.OrdinalIgnoreCase)) return "DSQ";
+            if (status.Equals("dns", StringComparison.OrdinalIgnoreCase)) return "DNS";
+            if (status.Equals("dnf", StringComparison.OrdinalIgnoreCase)) return "DNF";
+            return status;
+        }
+
         private bool TryGoToNextPage(IWebDriver driver, int currentPage, out int nextPage)
         {
             nextPage = currentPage + 1;
-            int targetPage = nextPage; // !!! Копируем значение для использования в лямбде
+            int targetPage = nextPage;
 
             var paginationContainers = driver.FindElements(By.CssSelector("[class*='pagination' i], [class*='Pagination' i]"));
             if (paginationContainers.Count == 0)
@@ -142,29 +198,6 @@ namespace SolidParcer.Services
             new WebDriverWait(driver, TimeSpan.FromSeconds(10))
                 .Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
             return true;
-        }
-
-        private string NormalizeHeroleagueTime(string time)
-        {
-            if (string.IsNullOrEmpty(time)) return "";
-            string cleaned = Regex.Replace(time, @"[^0-9:]", "");
-            var parts = cleaned.Split(':', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 3)
-            {
-                return $"{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}:{parts[2].PadLeft(2, '0')}.00";
-            }
-            else if (parts.Length == 2)
-            {
-                return $"00:{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}.00";
-            }
-            else if (parts.Length == 1)
-            {
-                return $"00:00:{parts[0].PadLeft(2, '0')}.00";
-            }
-            else
-            {
-                return cleaned;
-            }
         }
     }
 }
