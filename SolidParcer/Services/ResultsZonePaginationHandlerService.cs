@@ -9,7 +9,7 @@ using System.Threading;
 
 namespace SolidParcer.Services
 {
-    public class ResultsZonePaginationHandler : IPaginationHandler
+    public class ResultsZonePaginationHandlerService : IPaginationHandler
     {
         public List<ParticipantRecord> CollectRowsWithPagination(IWebDriver driver)
         {
@@ -19,18 +19,15 @@ namespace SolidParcer.Services
 
             while (currentPage <= maxPages)
             {
-                // Ждём появления строк в таблице
                 var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
                 wait.Until(drv => drv.FindElements(By.CssSelector("table tbody tr")).Count > 0);
 
-                // Собираем строки
                 var rows = driver.FindElements(By.CssSelector("table tbody tr"));
                 Console.WriteLine($"  Страница {currentPage}: собрано строк {rows.Count}");
 
                 foreach (var row in rows)
                 {
                     var cells = row.FindElements(By.TagName("td")).ToList();
-                    // Проверяем, что колонок достаточно (может быть 5-7)
                     if (cells.Count < 5) continue;
 
                     var record = new ParticipantRecord
@@ -40,14 +37,12 @@ namespace SolidParcer.Services
                         LastName = cells[2].Text.Trim(),
                         OfficialTime = cells[3].Text.Trim(),
                         Status = cells[4].Text.Trim(),
-                        // Если есть колонка с полом, берём её (индекс может быть 5 или 6)
                         Gender = cells.Count > 5 ? cells[5].Text.Trim() : "",
                         Category = cells.Count > 6 ? cells[6].Text.Trim() : ""
                     };
                     allRecords.Add(record);
                 }
 
-                // Поиск кнопки "Следующая страница"
                 var nextButton = driver.FindElements(By.CssSelector("a.next, li.next a, button[aria-label='Next'], a[rel='next']"))
                                        .FirstOrDefault(el => el.Enabled && el.Displayed);
 

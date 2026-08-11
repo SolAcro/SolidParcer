@@ -26,14 +26,14 @@ class Program
 
         if (url.Contains("heroleague.ru"))
         {
-            paginationHandler = new PaginationHandler();
-            pageParser = new PageParserService(paginationHandler);
+            paginationHandler = new HeroLeaguePaginationHandlerService();
+            pageParser = new HeroLeaguePageParserService(paginationHandler);
         }
         else if (url.Contains("results.zone"))
         {
             string basePath = ExtractBasePath(url);
-            paginationHandler = new ResultsZonePaginationHandler();
-            pageParser = new ResultsZonePageParser(paginationHandler, basePath);
+            paginationHandler = new ResultsZonePaginationHandlerService();
+            pageParser = new ResultsZonePageParserService(paginationHandler, basePath);
         }
         else
         {
@@ -46,7 +46,6 @@ class Program
         List<ParticipantRecord> allRecords = null;
         Dictionary<string, string> raceNames = null;
 
-        // Блок для работы с браузером
         using (var webDriverService = new WebDriverService())
         {
             using (var driver = webDriverService.CreateDriver())
@@ -89,11 +88,9 @@ class Program
                     Console.ReadKey();
                     return;
                 }
-                // Браузер будет закрыт автоматически при выходе из using
             }
         }
 
-        // Экспорт выполняется после закрытия браузера
         if (allRecords != null && allRecords.Any())
         {
             try

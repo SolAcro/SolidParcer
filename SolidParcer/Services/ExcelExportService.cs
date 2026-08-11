@@ -41,7 +41,6 @@ namespace SolidParcer.Services
             string categoryFolder = Path.Combine(rootFolder, "По категориям");
             Directory.CreateDirectory(mixedFolder);
             Directory.CreateDirectory(genderFolder);
-            // categoryFolder НЕ создаём здесь
 
             var formatGroups = uniqueRecords.GroupBy(r => r.Format);
 
@@ -50,15 +49,12 @@ namespace SolidParcer.Services
                 string format = group.Key;
                 var records = group.ToList();
 
-                // Получаем название гонки из словаря, если нет – используем ID
                 string raceName = raceNames != null && raceNames.ContainsKey(format) ? raceNames[format] : format;
                 string safeRaceName = string.Join("_", raceName.Split(Path.GetInvalidFileNameChars()));
 
-                // Смешанный файл
                 string mixedPath = Path.Combine(mixedFolder, $"{safeRaceName}.xlsx");
                 WriteExcelFile(records, mixedPath, $"{eventTitle} - {raceName}", eventDate, includeGender: true);
 
-                // По полу
                 var genderGroups = records.GroupBy(r => r.Gender).Where(g => g.Key != "Неизвестно" && !string.IsNullOrEmpty(g.Key));
                 foreach (var gGroup in genderGroups)
                 {
@@ -68,11 +64,9 @@ namespace SolidParcer.Services
                     WriteExcelFile(genderRecords, genderPath, $"{eventTitle} - {raceName} - {gender}", eventDate, includeGender: true);
                 }
 
-                // По категориям – создаём папку и файлы только если есть категории
                 var hasCategories = records.Any(r => !string.IsNullOrEmpty(r.Category));
                 if (hasCategories)
                 {
-                    // Создаём папку, если её ещё нет (на случай, если ни один формат не дал категорий)
                     if (!Directory.Exists(categoryFolder))
                         Directory.CreateDirectory(categoryFolder);
 
@@ -127,14 +121,13 @@ namespace SolidParcer.Services
 
                     string time = rec.OfficialTime;
                     if (rec.Status != "finished")
-                        time = ""; // очищаем для DNS / DNF / DSQ
+                        time = ""; 
 
                     worksheet.Cells[row, 1].Value = null;
                     worksheet.Cells[row, 2].Value = int.TryParse(rec.Number, out int num) ? num : rec.Number;
                     worksheet.Cells[row, 3].Value = rec.LastName;
                     worksheet.Cells[row, 4].Value = rec.FirstName;
                     worksheet.Cells[row, 5].Value = includeGender ? rec.Gender : "";
-                    // Остальные колонки пустые
                     for (int col = 6; col <= 22; col++)
                         worksheet.Cells[row, col].Value = "";
                     worksheet.Cells[row, 17].Value = time;   // Результат
@@ -149,9 +142,7 @@ namespace SolidParcer.Services
 
         private void WriteExcelFileFallback(List<ParticipantRecord> records, string filePath, string title, string date, bool includeGender)
         {
-            // Реализация fallback (взята из предыдущего кода)
-            // Можно оставить пустым или скопировать логику ручного форматирования
-            // Для краткости я пропущу, но вы можете вставить свой код.
+            // TODO: Реализация fallback
         }
     }
 }

@@ -32,7 +32,6 @@ namespace SolidParcer.Services
 
         public void CalculatePlaces(List<ParticipantRecord> records)
         {
-            // Время уже нормализовано в парсерах, просто парсим
             var finished = records
                 .Where(r => r.Status == "finished" && !string.IsNullOrEmpty(r.OfficialTime))
                 .Select(r => new { Record = r, Time = TryParseTime(r.OfficialTime) })
@@ -51,10 +50,10 @@ namespace SolidParcer.Services
         private TimeSpan? TryParseTime(string timeStr)
         {
             if (string.IsNullOrWhiteSpace(timeStr)) return null;
-            // Пробуем парсить с точкой (HH:mm:ss.ff)
+            //  (HH:mm:ss.ff)
             if (TimeSpan.TryParseExact(timeStr, @"hh\:mm\:ss\.ff", null, out var ts))
                 return ts;
-            // Пробуем без миллисекунд (HH:mm:ss)
+            //  (HH:mm:ss)
             if (TimeSpan.TryParseExact(timeStr, @"hh\:mm\:ss", null, out var ts2))
                 return ts2;
             // Общий парсинг

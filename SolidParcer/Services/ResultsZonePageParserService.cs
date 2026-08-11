@@ -12,13 +12,13 @@ using System.Text.RegularExpressions;
 
 namespace SolidParcer.Services
 {
-    public class ResultsZonePageParser : IPageParserService
+    public class ResultsZonePageParserService : IPageParserService
     {
         private readonly IPaginationHandler _paginationHandler;
         private readonly string _basePath;
         private readonly HttpClient _httpClient = new HttpClient();
 
-        public ResultsZonePageParser(IPaginationHandler paginationHandler, string basePath)
+        public ResultsZonePageParserService(IPaginationHandler paginationHandler, string basePath)
         {
             _paginationHandler = paginationHandler;
             _basePath = basePath;
@@ -28,18 +28,15 @@ namespace SolidParcer.Services
         {
             try
             {
-                // Пытаемся взять название из breadcrumb (второй элемент)
                 var breadcrumbItems = driver.FindElements(By.CssSelector("ol.breadcrumb li"));
                 if (breadcrumbItems.Count >= 2)
                 {
                     return breadcrumbItems[1].Text?.Trim();
                 }
 
-                // Если breadcrumb не найден, парсим <title>
                 string title = driver.Title;
                 if (!string.IsNullOrEmpty(title))
                 {
-                    // Пример: "Гонка 106 км — Gran Fondo Дубна 2026 :: Результаты"
                     var parts = title.Split(new[] { "—" }, StringSplitOptions.None);
                     if (parts.Length >= 2)
                     {
@@ -58,7 +55,6 @@ namespace SolidParcer.Services
 
         public string ExtractEventDate(IWebDriver driver)
         {
-            // 1. Попробуем найти дату внутри h2 small.text-muted
             try
             {
                 var h2 = driver.FindElement(By.CssSelector("h2"));
@@ -72,7 +68,6 @@ namespace SolidParcer.Services
             }
             catch { }
 
-            // 2. Если не нашли, попробуем извлечь из скрипта
             try
             {
                 var scriptResult = ((IJavaScriptExecutor)driver).ExecuteScript("return window.general.event.date_start;");
@@ -92,7 +87,6 @@ namespace SolidParcer.Services
         {
             var result = new List<string>();
 
-            // 1. Проверяем, не находимся ли мы на странице заезда
             string currentUrl = driver.Url;
             var match = Regex.Match(currentUrl, @"/races/(\d+)/results");
             if (match.Success)
@@ -101,7 +95,6 @@ namespace SolidParcer.Services
                 return result;
             }
 
-            // 2. Иначе ищем все ссылки на заезды на главной странице мероприятия
             var links = driver.FindElements(By.CssSelector("a[href*='/races/']"));
             foreach (var link in links)
             {
@@ -126,8 +119,6 @@ namespace SolidParcer.Services
 
         public List<ParticipantRecord> ParseFormat(IWebDriver driver, string format)
         {
-            // format — это ID заезда
-            // Скачиваем XLSX и парсим
             return DownloadAndParseXlsx(format).GetAwaiter().GetResult();
         }
 
@@ -167,10 +158,8 @@ namespace SolidParcer.Services
                     var worksheet = package.Workbook.Worksheets[0];
                     int maxCol = worksheet.Dimension?.Columns ?? 30;
                     int maxRow = Math.Min(worksheet.Dimension?.Rows ?? 50, 30);
-
-                    // --- 1. Поиск строки заголовка ---
                     int headerRow = -1;
-                    // Ищем строку, содержащую одновременно ключевые слова для номера, фамилии и имени
+
                     for (int r = 1; r <= maxRow; r++)
                     {
                         bool hasNumber = false, hasLastName = false, hasFirstName = false;
@@ -197,7 +186,6 @@ namespace SolidParcer.Services
                         }
                     }
 
-                    // Если не нашли, попробуем найти строку с "Место" и "Номер" (для некоторых форматов)
                     if (headerRow == -1)
                     {
                         for (int r = 1; r <= maxRow; r++)
@@ -222,14 +210,12 @@ namespace SolidParcer.Services
                         }
                     }
 
-                    // Если всё равно не нашли, используем fallback (строка 5 или 6 по опыту)
                     if (headerRow == -1)
                     {
                         Console.WriteLine($"  Не удалось найти строку заголовка для заезда {raceId}, используем fallback (строка 5)");
                         headerRow = 5;
                     }
 
-                    // --- Отладка: вывод найденной строки заголовка ---
                     Console.Write($"  Заголовки (строка {headerRow}): ");
                     for (int c = 1; c <= Math.Min(maxCol, 22); c++)
                     {
@@ -239,7 +225,6 @@ namespace SolidParcer.Services
                     }
                     Console.WriteLine();
 
-                    // --- 2. Определение индексов колонок по заголовкам ---
                     int colNumber = -1, colFirstName = -1, colLastName = -1, colOfficialTime = -1,
                         colStatus = -1, colGender = -1, colCategory = -1;
 
@@ -275,7 +260,6 @@ namespace SolidParcer.Services
                             colCategory = col;
                     }
 
-                    // Если какие-то колонки не найдены, используем эмпирические индексы (из анализа логов)
                     if (colNumber == -1) colNumber = 4;
                     if (colFirstName == -1) colFirstName = 8;
                     if (colLastName == -1) colLastName = 7;
@@ -287,12 +271,10 @@ namespace SolidParcer.Services
                     Console.WriteLine($"  Индексы: Номер={colNumber}, Имя={colFirstName}, Фамилия={colLastName}, " +
                                       $"Результат={colOfficialTime}, Статус={colStatus}, Пол={colGender}, Категория={colCategory}");
 
-                    // --- 3. Чтение данных ---
                     int dataRow = headerRow + 1;
                     int rowCount = 0;
                     while (true)
                     {
-                        // Пропускаем пустые строки
                         string numberCell = worksheet.Cells[dataRow, colNumber].Text?.Trim() ?? "";
                         string lastNameCell = worksheet.Cells[dataRow, colLastName].Text?.Trim() ?? "";
                         string firstNameCell = worksheet.Cells[dataRow, colFirstName].Text?.Trim() ?? "";
@@ -348,30 +330,25 @@ namespace SolidParcer.Services
         private string NormalizeTime(string time)
         {
             if (string.IsNullOrEmpty(time)) return "";
-            // Убираем всё, кроме цифр, двоеточий и точек
             string cleaned = Regex.Replace(time, @"[^0-9:.]", "");
-            // Заменяем точки на двоеточия для унификации
             cleaned = cleaned.Replace('.', ':');
 
             var parts = cleaned.Split(':', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 4)
             {
-                // часы:минуты:секунды:миллисекунды
                 return $"{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}:{parts[2].PadLeft(2, '0')}.{parts[3].PadLeft(2, '0')}";
             }
             else if (parts.Length == 3)
             {
-                // часы:минуты:секунды
                 return $"{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}:{parts[2].PadLeft(2, '0')}.00";
             }
             else if (parts.Length == 2)
             {
-                // минуты:секунды 00:MM:SS.00
                 return $"00:{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}.00";
             }
             else
             {
-                return cleaned; // fallback
+                return cleaned;
             }
         }
 

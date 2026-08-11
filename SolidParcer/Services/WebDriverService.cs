@@ -17,7 +17,6 @@ namespace SolidParcer.Services
             _service.SuppressInitialDiagnosticInformation = true;
 
             var options = new ChromeOptions();
-            // options.AddArgument("--headless");
 
             _driver = new ChromeDriver(_service, options);
             return _driver;

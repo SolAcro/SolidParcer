@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace SolidParcer.Services
 {
-    public class PaginationHandler : IPaginationHandler
+    public class HeroLeaguePaginationHandlerService : IPaginationHandler
     {
         public List<ParticipantRecord> CollectRowsWithPagination(IWebDriver driver)
         {
@@ -31,7 +31,6 @@ namespace SolidParcer.Services
                 var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
                 wait.Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
 
-                // Прокрутка для подгрузки всех строк (динамическое ожидание)
                 int lastCount = 0, stableCount = 0;
                 while (stableCount < 3)
                 {
@@ -49,7 +48,6 @@ namespace SolidParcer.Services
                 var pageRows = driver.FindElements(By.CssSelector("div._tr_1boqa_9"));
                 Console.WriteLine($"  Собрано строк на странице {currentPage}: {pageRows.Count}");
 
-                // Парсим строки в записи
                 foreach (var row in pageRows)
                 {
                     var cells = row.FindElements(By.CssSelector("div._td_1boqa_77")).ToList();
@@ -66,7 +64,6 @@ namespace SolidParcer.Services
                     allRecords.Add(record);
                 }
 
-                // --- Обработка пагинации ---
                 if (!TryGoToNextPage(driver, currentPage, out int newPage))
                     break;
                 currentPage = newPage;
@@ -105,7 +102,6 @@ namespace SolidParcer.Services
                 return false;
             }
 
-            // Поиск кнопки с номером targetPage
             var nextPageButton = allPageItems.FirstOrDefault(el => el.Text.Trim() == targetPage.ToString());
             if (nextPageButton != null && nextPageButton.Enabled && nextPageButton.Displayed)
             {
@@ -116,7 +112,6 @@ namespace SolidParcer.Services
                 return true;
             }
 
-            // Запасной вариант – кнопка "Вперед"
             var nextButton = container.FindElements(By.XPath(
                 ".//a[contains(text(),'Вперед') or contains(text(),'Next') or contains(text(),'→') or contains(@aria-label,'Next')] | " +
                 ".//button[contains(@aria-label,'Next')] | " +
@@ -152,27 +147,23 @@ namespace SolidParcer.Services
         private string NormalizeHeroleagueTime(string time)
         {
             if (string.IsNullOrEmpty(time)) return "";
-            // Убираем всё, кроме цифр и двоеточий
             string cleaned = Regex.Replace(time, @"[^0-9:]", "");
             var parts = cleaned.Split(':', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 3)
             {
-                // часы:минуты:секунды
                 return $"{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}:{parts[2].PadLeft(2, '0')}.00";
             }
             else if (parts.Length == 2)
             {
-                // минуты:секунды
                 return $"00:{parts[0].PadLeft(2, '0')}:{parts[1].PadLeft(2, '0')}.00";
             }
             else if (parts.Length == 1)
             {
-                // только секунды
                 return $"00:00:{parts[0].PadLeft(2, '0')}.00";
             }
             else
             {
-                return cleaned; // fallback
+                return cleaned;
             }
         }
     }

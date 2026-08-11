@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 
 namespace SolidParcer.Services
 {
-    public class PageParserService : IPageParserService
+    public class HeroLeaguePageParserService : IPageParserService
     {
         private readonly IPaginationHandler _paginationHandler;
 
-        public PageParserService(IPaginationHandler paginationHandler)
+        public HeroLeaguePageParserService(IPaginationHandler paginationHandler)
         {
             _paginationHandler = paginationHandler;
         }
@@ -55,12 +55,10 @@ namespace SolidParcer.Services
 
         public List<ParticipantRecord> ParseFormat(IWebDriver driver, string format)
         {
-            // Выбор формата
             var radio = driver.FindElement(By.CssSelector($"input[type='radio'][id='{format}_filter']"));
             if (!radio.Selected)
                 ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", radio);
 
-            // Ждём появления строк
             new WebDriverWait(driver, TimeSpan.FromSeconds(10))
                 .Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
 
