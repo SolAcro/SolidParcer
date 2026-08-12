@@ -125,6 +125,8 @@ namespace SolidParcer.Services
             if (status.Equals("disqualified", StringComparison.OrdinalIgnoreCase)) return "DSQ";
             if (status.Equals("dns", StringComparison.OrdinalIgnoreCase)) return "DNS";
             if (status.Equals("dnf", StringComparison.OrdinalIgnoreCase)) return "DNF";
+            if (status.Equals("retired", StringComparison.OrdinalIgnoreCase)) return "DNF";
+            if (status.Equals("quarantine", StringComparison.OrdinalIgnoreCase)) return "DSQ";
             return status;
         }
 

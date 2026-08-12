@@ -46,10 +46,18 @@ namespace SolidParcer.Services
             if (string.IsNullOrWhiteSpace(firstName))
                 return null;
 
+            // Исключения для имен, которые неправильно определены в датасетах
+            var femaleExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Катя"
+            };
+            if (femaleExceptions.Contains(firstName))
+                return "Ж";
+
+            string normalizedName = firstName.Trim().ToLowerInvariant();
             var genderMap = NameGenderLoader.LoadGenderMap();
             if (genderMap != null)
             {
-                string normalizedName = firstName.Trim().ToLowerInvariant();
                 if (genderMap.TryGetValue(normalizedName, out string genderFromDict))
                 {
                     return genderFromDict;

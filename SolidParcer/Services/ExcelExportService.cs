@@ -64,13 +64,13 @@ namespace SolidParcer.Services
                     WriteExcelFile(genderRecords, genderPath, $"{eventTitle} - {raceName} - {gender}", eventDate, includeGender: true);
                 }
 
-                var hasCategories = records.Any(r => !string.IsNullOrEmpty(r.Category));
+                var hasCategories = records.Any(r => !string.IsNullOrEmpty(r.Category) && !IsTimeFormat(r.Category));
                 if (hasCategories)
                 {
                     if (!Directory.Exists(categoryFolder))
                         Directory.CreateDirectory(categoryFolder);
 
-                    var categoryGroups = records.GroupBy(r => r.Category).Where(g => !string.IsNullOrEmpty(g.Key));
+                    var categoryGroups = records.GroupBy(r => r.Category).Where(g => !string.IsNullOrEmpty(g.Key) && !IsTimeFormat(g.Key));
                     foreach (var catGroup in categoryGroups)
                     {
                         string category = catGroup.Key;
@@ -83,6 +83,13 @@ namespace SolidParcer.Services
             }
 
             Console.WriteLine($"Все файлы сохранены в папке: {rootFolder}");
+        }
+
+        private bool IsTimeFormat(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return System.Text.RegularExpressions.Regex.IsMatch(text, @"^\d{1,2}:\d{2}(:\d{2})?$") ||
+                   System.Text.RegularExpressions.Regex.IsMatch(text, @"^\d{1,2}:\d{2}:\d{2}\.\d{2}$");
         }
 
         private void WriteExcelFile(List<ParticipantRecord> records, string filePath, string title, string date, bool includeGender)
