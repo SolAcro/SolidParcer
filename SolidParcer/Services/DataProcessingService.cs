@@ -52,11 +52,7 @@ namespace SolidParcer.Services
                 string normalizedName = firstName.Trim().ToLowerInvariant();
                 if (genderMap.TryGetValue(normalizedName, out string genderFromDict))
                 {
-                    return genderFromDict == "m" ? "М" : "Ж";
-                }
-                if (!string.IsNullOrEmpty(firstName) && genderMap.TryGetValue(firstName.ToLowerInvariant(), out string genderFromDictLatn))
-                {
-                    return genderFromDictLatn == "m" ? "М" : "Ж";
+                    return genderFromDict;
                 }
             }
 

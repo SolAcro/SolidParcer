@@ -115,7 +115,7 @@ namespace SolidParcer.Services
                         "finished" or "Q" => "",
                         "notstarted" => "DNS",
                         "disqualified" => "DSQ",
-                        "notfinished" or "running" => "DNF",
+                        "notfinished" or "running" or "retired" or "quarantine" => "DNF",
                         _ => rec.Status
                     };
 

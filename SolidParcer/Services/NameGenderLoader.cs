@@ -14,44 +14,151 @@ namespace SolidParcer.Services
         {
             if (_genderMap != null) return _genderMap;
 
-            if (string.IsNullOrEmpty(csvPath))
-                csvPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "russian_names.csv");
+            _genderMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            if (!File.Exists(csvPath))
+            // 1. Русские имена
+            LoadRussianNames(_genderMap);
+
+            // 2. Чувашские имена
+            LoadChuvashNames(_genderMap);
+
+            // 3. Международные имена
+            LoadInternationalNames(_genderMap);
+
+            Console.WriteLine($"Загружено всего имён: {_genderMap.Count}");
+            return _genderMap;
+        }
+
+        private static void LoadInternationalNames(Dictionary<string, string> map)
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "international_names.csv");
+            if (!File.Exists(path))
             {
-                Console.WriteLine($"Файл датасета не найден: {csvPath}. Будет использована встроенная эвристика.");
-                return null;
+                Console.WriteLine($"Файл международных имён не найден: {path}");
+                return;
             }
 
-            _genderMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var lines = File.ReadAllLines(csvPath);
+            var lines = File.ReadAllLines(path).Skip(1);
+            int loaded = 0;
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var parts = line.Split(',');
+                if (parts.Length < 3) continue;
 
-            // Пропускаем заголовок (первая строка)
-            foreach (var line in lines.Skip(1))
+                string nameLatin = parts[0].Trim();
+                string nameCyrillic = parts[1].Trim();
+                string gender = parts[2].Trim();
+
+                if (string.IsNullOrEmpty(nameLatin) && string.IsNullOrEmpty(nameCyrillic)) continue;
+
+                string mappedGender = gender == "male" || gender == "M" || gender == "m" ? "М" :
+                                      gender == "female" || gender == "F" || gender == "f" ? "Ж" :
+                                      gender == "unknown" ? null : null;
+
+                if (mappedGender == null) continue;
+
+                if (!string.IsNullOrEmpty(nameLatin) && !map.ContainsKey(nameLatin))
+                {
+                    map[nameLatin] = mappedGender;
+                    loaded++;
+                }
+
+                if (!string.IsNullOrEmpty(nameCyrillic) && !map.ContainsKey(nameCyrillic))
+                {
+                    map[nameCyrillic] = mappedGender;
+                    loaded++;
+                }
+            }
+            Console.WriteLine($"Загружено международных имён: {loaded}");
+        }
+        private static void LoadChuvashNames(Dictionary<string, string> map)
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "chuvash_names.jsonl");
+            if (!File.Exists(path))
+            {
+                Console.WriteLine($"Файл чувашских имён не найден: {path}");
+                return;
+            }
+
+            int loaded = 0;
+            foreach (var line in File.ReadLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+
+                    string name = root.GetProperty("name").GetString()?.Trim();
+                    string gender = root.GetProperty("gender").GetString();
+
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(gender)) continue;
+
+                    // m → М, f → Ж, u → Неизвестно
+                    string mappedGender = gender == "m" ? "М" :
+                                          gender == "f" ? "Ж" :
+                                          gender == "u" ? null : null;
+
+                    if (mappedGender == null) continue;
+
+                    if (!map.ContainsKey(name))
+                    {
+                        map[name] = mappedGender;
+                        loaded++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка парсинга строки чувашских имён: {ex.Message}");
+                }
+            }
+            Console.WriteLine($"Загружено чувашских имён: {loaded}");
+        }
+
+        private static void LoadRussianNames(Dictionary<string, string> map)
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "russian_names.csv");
+            if (!File.Exists(path))
+            {
+                Console.WriteLine($"Файл русских имён не найден: {path}");
+                return;
+            }
+
+            var lines = File.ReadAllLines(path).Skip(1);
+            int loaded = 0;
+            foreach (var line in lines)
             {
                 var parts = line.Split(',');
                 if (parts.Length < 3) continue;
-                string name = parts[0].Trim();   // name_cyrl
-                string gender = parts[2].Trim(); // gender (m/f)
-                if (string.IsNullOrEmpty(name)) continue;
 
-                // Сохраняем в двух вариантах: оригинальный регистр и в нижнем
+                string name = parts[0].Trim();
+                string gender = parts[2].Trim();
+
+                if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(gender)) continue;
+
+                string mappedGender = gender == "m" ? "М" : "Ж";
                 string nameLower = name.ToLowerInvariant();
-                if (!_genderMap.ContainsKey(nameLower))
+
+                if (!map.ContainsKey(nameLower))
                 {
-                    _genderMap[nameLower] = gender;
+                    map[nameLower] = mappedGender;
+                    loaded++;
                 }
-                // Если есть транслитерация (name_latn), можно добавить и её
+
                 string nameLatn = parts[1].Trim();
                 if (!string.IsNullOrEmpty(nameLatn))
                 {
                     string latnLower = nameLatn.ToLowerInvariant();
-                    if (!_genderMap.ContainsKey(latnLower))
-                        _genderMap[latnLower] = gender;
+                    if (!map.ContainsKey(latnLower))
+                    {
+                        map[latnLower] = mappedGender;
+                        loaded++;
+                    }
                 }
             }
-            Console.WriteLine($"Загружено имён из датасета: {_genderMap.Count}");
-            return _genderMap;
+            Console.WriteLine($"Загружено русских имён: {loaded}");
         }
     }
 }
