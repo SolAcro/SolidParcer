@@ -14,20 +14,53 @@ namespace SolidParcer.Services
         public void AssignGender(List<ParticipantRecord> records)
         {
             foreach (var rec in records)
-                rec.Gender = DetectGender(rec.FirstName);
+            {
+                string detected = DetectGender(rec.FirstName, rec.LastName); 
+
+                if (!string.IsNullOrEmpty(detected))
+                {
+                    rec.Gender = detected;
+                }
+                else
+                {
+                    rec.Gender = "";
+                }
+            }
         }
 
-        private string DetectGender(string firstName)
+        private string DetectGenderByHeuristics(string firstName)
         {
             if (string.IsNullOrWhiteSpace(firstName)) return "Неизвестно";
             var maleNames = new HashSet<string> {
                 "Илья", "Никита", "Саша", "Женя", "Валя", "Слава", "Дима", "Миша",
                 "Ваня", "Даня", "Сеня", "Толя", "Костя", "Паша", "Гриша", "Петя",
-                "Федя", "Витя"
+                "Федя", "Витя", "Данила"
             };
             if (maleNames.Contains(firstName)) return "М";
             if (firstName.EndsWith("а") || firstName.EndsWith("я")) return "Ж";
-            return "М";
+            return null;
+        }
+
+        private string DetectGender(string firstName, string lastName)
+        {
+            if (string.IsNullOrWhiteSpace(firstName))
+                return null;
+
+            var genderMap = NameGenderLoader.LoadGenderMap();
+            if (genderMap != null)
+            {
+                string normalizedName = firstName.Trim().ToLowerInvariant();
+                if (genderMap.TryGetValue(normalizedName, out string genderFromDict))
+                {
+                    return genderFromDict == "m" ? "М" : "Ж";
+                }
+                if (!string.IsNullOrEmpty(firstName) && genderMap.TryGetValue(firstName.ToLowerInvariant(), out string genderFromDictLatn))
+                {
+                    return genderFromDictLatn == "m" ? "М" : "Ж";
+                }
+            }
+
+            return DetectGenderByHeuristics(firstName);
         }
 
         public void CalculatePlaces(List<ParticipantRecord> records)

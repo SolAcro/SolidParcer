@@ -8,6 +8,7 @@ class Program
     static void Main(string[] args)
     {
         OfficeOpenXml.ExcelPackage.License.SetNonCommercialPersonal("UniversalParser");
+        var genderMap = NameGenderLoader.LoadGenderMap();
         Console.WriteLine("=== Универсальный парсер результатов ===\n");
 
         var userInteraction = new UserInteractionService();
