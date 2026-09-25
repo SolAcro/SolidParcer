@@ -12,11 +12,16 @@ namespace SolidParcer.Services
 {
     public class HeroLeaguePaginationHandlerService : IPaginationHandler
     {
+        // Префиксы классов (хэш после префикса меняется между сборками фронта)
+        private const string RowSelector = "div[role='row']";
+        private const string CellSelector = "[data-label]";
+
         public List<ParticipantRecord> CollectRowsWithPagination(IWebDriver driver)
         {
             var allRecords = new List<ParticipantRecord>();
             int currentPage = 1;
             const int maxPages = 50;
+            string prevFirstNumber = null;
 
             while (currentPage <= maxPages)
             {
@@ -27,14 +32,14 @@ namespace SolidParcer.Services
                 }
 
                 Console.WriteLine($"  Ожидаем загрузки данных... (страница {currentPage})");
-                var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-                wait.Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
+                var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(30));
+                wait.Until(drv => GetDataRows(drv).Count > 0);
 
                 // Прокрутка для подгрузки всех строк
                 int lastCount = 0, stableCount = 0;
                 while (stableCount < 3)
                 {
-                    var rows = driver.FindElements(By.CssSelector("div._tr_1boqa_9"));
+                    var rows = GetDataRows(driver);
                     int currentCount = rows.Count;
                     if (currentCount == lastCount) stableCount++;
                     else stableCount = 0;
@@ -45,39 +50,81 @@ namespace SolidParcer.Services
                     Thread.Sleep(200);
                 }
 
-                var pageRows = driver.FindElements(By.CssSelector("div._tr_1boqa_9"));
-                if (!pageRows.Any()) break;
-                Console.WriteLine($"  Собрано строк на странице {currentPage}: {pageRows.Count}");
-
-                // --- Определяем индексы колонок по data-label первой строки ---
-                var firstRowCells = pageRows.First().FindElements(By.CssSelector("div._td_1boqa_77")).ToList();
-                if (firstRowCells.Count < 5) break;
-
-                int idxNumber = -1, idxFirstName = -1, idxLastName = -1, idxOfficialTime = -1, idxStatus = -1, idxCategory = -1;
-                for (int i = 0; i < firstRowCells.Count; i++)
+                var pageRows = GetDataRows(driver);
+                if (!pageRows.Any())
                 {
-                    string label = firstRowCells[i].GetAttribute("data-label") ?? "";
-                    if (label.Contains("Номер")) idxNumber = i;
-                    else if (label.Contains("Имя")) idxFirstName = i;
-                    else if (label.Contains("Фамилия")) idxLastName = i;
-                    else if (label.Contains("Время официальное")) idxOfficialTime = i;
-                    else if (label.Contains("Статус")) idxStatus = i;
-                    else if (label.Contains("Категория")) idxCategory = i;
+                    Console.WriteLine("\n  Строки данных не найдены.");
+                    break;
                 }
 
-                // Fallback, если data-label не сработал (страховка)
+                Console.WriteLine($"\n  Собрано строк на странице {currentPage}: {pageRows.Count}");
+
+                // Проверка — не зациклились ли на одной и той же странице
+                string firstNumber = pageRows.First()
+                    .FindElements(By.CssSelector(CellSelector)).FirstOrDefault()?.Text?.Trim();
+                if (firstNumber != null && firstNumber == prevFirstNumber)
+                {
+                    Console.WriteLine("  Первая строка не изменилась — вероятно, переход не сработал. Завершаем.");
+                    break;
+                }
+                prevFirstNumber = firstNumber;
+
+                // --- Определяем индексы колонок по data-label первой строки ---
+                var firstRowCells = pageRows.First().FindElements(By.CssSelector(CellSelector)).ToList();
+                if (firstRowCells.Count < 5)
+                {
+                    Console.WriteLine($"  В первой строке только {firstRowCells.Count} ячеек — пропускаем.");
+                    break;
+                }
+
+                int idxNumber = -1, idxFirstName = -1, idxLastName = -1,
+                    idxNetTime = -1, idxOfficialTime = -1,
+                    idxStatus = -1, idxPlace = -1, idxCategory = -1;
+
+                for (int i = 0; i < firstRowCells.Count; i++)
+                {
+                    string label = (firstRowCells[i].GetAttribute("data-label") ?? "").ToLowerInvariant();
+
+                    if (label.Contains("номер")) idxNumber = i;
+                    else if (label.Contains("имя")) idxFirstName = i;
+                    else if (label.Contains("фамилия")) idxLastName = i;
+                    else if (label.Contains("время") && label.Contains("чистое")) idxNetTime = i;
+                    else if (label.Contains("время") && label.Contains("официальн")) idxOfficialTime = i;
+                    else if (label.Contains("статус")) idxStatus = i;
+                    else if (label.Contains("место")) idxPlace = i;
+                    else if (label.Contains("категория")) idxCategory = i;
+                }
+
+                // Если «чистое» не нашли — используем «официальное»
+                if (idxNetTime == -1)
+                {
+                    if (idxOfficialTime != -1)
+                    {
+                        idxNetTime = idxOfficialTime;
+                        Console.WriteLine("  Внимание: колонка «Время чистое» не найдена, используется «Время официальное».");
+                    }
+                    else
+                    {
+                        // Последний фолбэк — берём 5-ю колонку (0-based = 4)
+                        idxNetTime = firstRowCells.Count > 4 ? 4 : firstRowCells.Count - 1;
+                        Console.WriteLine("  Внимание: колонки времени не найдены, берём колонку по индексу.");
+                    }
+                }
+
                 if (idxNumber == -1) idxNumber = 0;
                 if (idxFirstName == -1) idxFirstName = 1;
                 if (idxLastName == -1) idxLastName = 2;
-                if (idxOfficialTime == -1) idxOfficialTime = (firstRowCells.Count == 8) ? 3 : 4;
-                if (idxStatus == -1) idxStatus = (firstRowCells.Count == 8) ? 5 : 6;
-                if (idxCategory == -1) idxCategory = (firstRowCells.Count == 8) ? 7 : 3;
+                if (idxStatus == -1) idxStatus = 5;
+                if (idxCategory == -1) idxCategory = firstRowCells.Count - 1;
+
+                Console.WriteLine($"  Индексы: Номер={idxNumber}, Имя={idxFirstName}, Фамилия={idxLastName}, " +
+                                  $"ЧистоеВремя={idxNetTime}, Статус={idxStatus}, Категория={idxCategory}");
 
                 // --- Парсим все строки ---
                 foreach (var row in pageRows)
                 {
-                    var cells = row.FindElements(By.CssSelector("div._td_1boqa_77")).ToList();
-                    int maxIdx = new[] { idxNumber, idxFirstName, idxLastName, idxOfficialTime, idxStatus, idxCategory }.Max();
+                    var cells = row.FindElements(By.CssSelector(CellSelector)).ToList();
+                    int maxIdx = new[] { idxNumber, idxFirstName, idxLastName, idxNetTime, idxStatus, idxCategory }.Max();
                     if (cells.Count <= maxIdx)
                         continue;
 
@@ -86,9 +133,12 @@ namespace SolidParcer.Services
                         Number = cells[idxNumber].Text.Trim(),
                         FirstName = cells[idxFirstName].Text.Trim(),
                         LastName = cells[idxLastName].Text.Trim(),
-                        OfficialTime = NormalizeHeroleagueTime(idxOfficialTime >= 0 && idxOfficialTime < cells.Count ? cells[idxOfficialTime].Text.Trim() : ""),
-                        Status = NormalizeStatus(idxStatus >= 0 && idxStatus < cells.Count ? cells[idxStatus].Text.Trim() : ""),
-                        Category = idxCategory >= 0 && idxCategory < cells.Count ? cells[idxCategory].Text.Trim() : ""
+                        OfficialTime = NormalizeHeroleagueTime(
+                            idxNetTime >= 0 && idxNetTime < cells.Count ? cells[idxNetTime].Text.Trim() : ""),
+                        Status = NormalizeStatus(
+                            idxStatus >= 0 && idxStatus < cells.Count ? cells[idxStatus].Text.Trim() : ""),
+                        Category = idxCategory >= 0 && idxCategory < cells.Count ? cells[idxCategory].Text.Trim() : "",
+                        Place = idxPlace >= 0 && idxPlace < cells.Count ? cells[idxPlace].Text.Trim() : ""
                     };
                     allRecords.Add(record);
                 }
@@ -100,6 +150,16 @@ namespace SolidParcer.Services
             }
 
             return allRecords;
+        }
+
+        /// <summary>
+        /// Возвращает только строки данных (не заголовок): div[role=row], внутри которых есть [data-label].
+        /// </summary>
+        private List<IWebElement> GetDataRows(IWebDriver driver)
+        {
+            return driver.FindElements(By.CssSelector(RowSelector))
+                         .Where(r => r.FindElements(By.CssSelector(CellSelector)).Count > 0)
+                         .ToList();
         }
 
         private string NormalizeHeroleagueTime(string time)
@@ -135,71 +195,102 @@ namespace SolidParcer.Services
             nextPage = currentPage + 1;
             int targetPage = nextPage;
 
-            var paginationContainers = driver.FindElements(By.CssSelector("[class*='pagination' i], [class*='Pagination' i]"));
-            if (paginationContainers.Count == 0)
+            try
             {
-                Console.WriteLine("  Контейнер пагинации не найден. Завершаем.");
-                return false;
-            }
+                // Запоминаем номер первой строки — это наш маркер смены страницы
+                string beforeFirstNumber = GetFirstRowNumber(driver);
 
-            var container = paginationContainers.First();
-            var allPageItems = container.FindElements(By.XPath(".//a | .//button"))
-                                        .Where(el => int.TryParse(el.Text.Trim(), out _))
-                                        .ToList();
+                // 1. Ищем прямую ссылку на целевую страницу (номер "2", "3", ...)
+                IWebElement nextLink = null;
+                var allPageLinks = driver.FindElements(By.CssSelector("ul[class*='_pagination_'] a"));
 
-            if (allPageItems.Count == 0)
-            {
-                allPageItems = driver.FindElements(By.XPath("//li[contains(@class,'page') or contains(@class,'Page')]//a | //button[contains(@class,'page') or contains(@class,'Page')]"))
-                                     .Where(el => int.TryParse(el.Text.Trim(), out _))
-                                     .ToList();
-            }
+                foreach (var link in allPageLinks)
+                {
+                    if (link.Displayed && link.Enabled && link.Text.Trim() == targetPage.ToString())
+                    {
+                        nextLink = link;
+                        break;
+                    }
+                }
 
-            if (allPageItems.Count == 0)
-            {
-                Console.WriteLine("  Не найдены кнопки с номерами страниц. Завершаем.");
-                return false;
-            }
+                // 2. Если такой нет — берём «Next» (aria-label='Next' или текст «»)
+                if (nextLink == null)
+                {
+                    nextLink = allPageLinks.FirstOrDefault(el =>
+                        el.Displayed && el.Enabled &&
+                        (((el.GetAttribute("aria-label") ?? "").ToLowerInvariant().Contains("next")) ||
+                         el.Text.Contains("»")));
+                }
 
-            var nextPageButton = allPageItems.FirstOrDefault(el => el.Text.Trim() == targetPage.ToString());
-            if (nextPageButton != null && nextPageButton.Enabled && nextPageButton.Displayed)
-            {
-                Console.WriteLine($"  Найдена кнопка перехода на страницу {targetPage}. Кликаем.");
-                ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", nextPageButton);
-                new WebDriverWait(driver, TimeSpan.FromSeconds(10))
-                    .Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
+                if (nextLink == null)
+                {
+                    Console.WriteLine("  Кнопка перехода на следующую страницу не найдена. Завершаем.");
+                    return false;
+                }
+
+                Console.WriteLine($"  URL до клика: {driver.Url}");
+                Console.WriteLine($"  Активная страница до клика: {GetActivePageText(driver)}");
+
+                // 3. Нативный клик Selenium — isTrusted=true, SPA-обработчики его видят
+                try
+                {
+                    nextLink.Click();
+                }
+                catch (Exception)
+                {
+                    // Если клик перехвачен оверлеем — пробуем через JS, БЕЗ preventDefault
+                    ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", nextLink);
+                }
+
+                // 4. Ждём смены первой строки (более надёжно, чем класс активной страницы)
+                var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(20));
+                try
+                {
+                    wait.Until(drv =>
+                    {
+                        string nowFirstNumber = GetFirstRowNumber(drv);
+                        return nowFirstNumber != null && nowFirstNumber != beforeFirstNumber;
+                    });
+                }
+                catch (WebDriverTimeoutException)
+                {
+                    Console.WriteLine($"  URL после клика: {driver.Url}");
+                    Console.WriteLine($"  Активная страница после клика: {GetActivePageText(driver)}");
+                    Console.WriteLine("  Данные не изменились после клика. Завершаем.");
+                    return false;
+                }
+
+                Console.WriteLine($"  Успешно перешли на страницу {targetPage}.");
                 return true;
             }
-
-            var nextButton = container.FindElements(By.XPath(
-                ".//a[contains(text(),'Вперед') or contains(text(),'Next') or contains(text(),'→') or contains(@aria-label,'Next')] | " +
-                ".//button[contains(@aria-label,'Next')] | " +
-                ".//a[contains(@rel,'next')]"))
-                .FirstOrDefault(el => el.Enabled && el.Displayed);
-
-            if (nextButton == null)
+            catch (Exception ex)
             {
-                nextButton = container.FindElements(By.CssSelector("[class*='next' i]:not([class*='disabled']):not([class*='hidden']) a, [class*='next' i]:not([class*='disabled']):not([class*='hidden']) button"))
-                                      .FirstOrDefault(el => el.Enabled && el.Displayed);
-            }
-
-            if (nextButton == null)
-            {
-                Console.WriteLine("  Не найдена кнопка для перехода на следующую страницу. Завершаем.");
+                Console.WriteLine($"  Ошибка при переходе на следующую страницу: {ex.Message}");
                 return false;
             }
+        }
 
-            string btnText = nextButton.Text.Trim().ToLower();
-            if (btnText.Contains("prev") || btnText.Contains("назад") || btnText.Contains("предыдущая"))
+        private string GetFirstRowNumber(IWebDriver driver)
+        {
+            try
             {
-                Console.WriteLine("  Найдена кнопка 'Назад', а не 'Вперед'. Завершаем.");
-                return false;
+                var rows = GetDataRows(driver);
+                if (rows.Count == 0) return null;
+                var cells = rows.First().FindElements(By.CssSelector(CellSelector));
+                return cells.Count > 0 ? cells[0].Text.Trim() : null;
             }
+            catch { return null; }
+        }
 
-            Console.WriteLine("  Найдена кнопка 'Вперед'. Кликаем.");
-            ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", nextButton);
-            new WebDriverWait(driver, TimeSpan.FromSeconds(10))
-                .Until(drv => drv.FindElements(By.CssSelector("div._tr_1boqa_9")).Count > 0);
-            return true;
+        private string GetActivePageText(IWebDriver driver)
+        {
+            try
+            {
+                var active = driver.FindElements(By.CssSelector("li[class*='_pageItemActive_'] a"))
+                                   .FirstOrDefault();
+                return active?.Text.Trim() ?? "(не найдено)";
+            }
+            catch { return "(ошибка)"; }
         }
     }
 }
