@@ -87,15 +87,44 @@ namespace SolidParcer.Services
         private TimeSpan? TryParseTime(string timeStr)
         {
             if (string.IsNullOrWhiteSpace(timeStr)) return null;
-            //  (HH:mm:ss.ff)
-            if (TimeSpan.TryParseExact(timeStr, @"hh\:mm\:ss\.ff", null, out var ts))
+
+            string cleaned = timeStr.Trim();
+            var parts = cleaned.Split(':');
+
+            // HH:MM:SS.ms  (основной формат после NormalizeTime)
+            if (parts.Length == 3)
+            {
+                string secPart = parts[2];
+                string msPart = "0";
+
+                if (secPart.Contains('.'))
+                {
+                    var s = secPart.Split('.');
+                    secPart = s[0];
+                    msPart = s[1];
+                }
+
+                if (int.TryParse(parts[0], out int h) &&
+                    int.TryParse(parts[1], out int m) &&
+                    int.TryParse(secPart, out int s2) &&
+                    int.TryParse(msPart.PadRight(3, '0').Substring(0, 3), out int ms))
+                {
+                    return new TimeSpan(0, h, m, s2, ms);
+                }
+            }
+
+            // MM:SS  (фолбэк, на всякий случай)
+            if (parts.Length == 2 &&
+                int.TryParse(parts[0], out int mm) &&
+                int.TryParse(parts[1], out int ss))
+            {
+                return new TimeSpan(0, mm, ss);
+            }
+
+            // Общий фолбэк
+            if (TimeSpan.TryParse(cleaned, out var ts))
                 return ts;
-            //  (HH:mm:ss)
-            if (TimeSpan.TryParseExact(timeStr, @"hh\:mm\:ss", null, out var ts2))
-                return ts2;
-            // Общий парсинг
-            if (TimeSpan.TryParse(timeStr, out var ts3))
-                return ts3;
+
             return null;
         }
 

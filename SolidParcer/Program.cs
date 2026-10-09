@@ -97,6 +97,10 @@ class Program
 
             pageParser = apiParser;
         }
+        else if (url.Contains("racetime.online"))
+        {
+            pageParser = new RacetimeApiParserService();
+        }
         else
         {
             Console.WriteLine("Сайт не поддерживается.");
@@ -121,7 +125,7 @@ class Program
                         userInteraction.ShowMessage("Страница загружается...");
 
                         var wait = new OpenQA.Selenium.Support.UI.WebDriverWait(driver, TimeSpan.FromSeconds(30));
-                        if (url.Contains("heroleague.ru"))
+                        if (url.Contains("heroleague.ru"))     
                         {
                             wait.Until(drv => drv.FindElements(OpenQA.Selenium.By.CssSelector("input[type='radio'][name='format']")).Count > 0);
                         }
@@ -129,6 +133,10 @@ class Program
                         {
                             wait.Until(drv => drv.FindElements(OpenQA.Selenium.By.CssSelector("a[href*='/races/']")).Count > 0 ||
                                               drv.FindElements(OpenQA.Selenium.By.CssSelector(".heats_table")).Count > 0);
+                        }
+                        else if (url.Contains("racetime.online"))
+                        {
+                            wait.Until(drv => drv.FindElements(OpenQA.Selenium.By.CssSelector("h1.display-5")).Count > 0);
                         }
 
                         eventTitle = pageParser.ExtractEventTitle(driver);
