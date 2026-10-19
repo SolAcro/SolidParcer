@@ -69,7 +69,13 @@ namespace SolidParcer.Services
 
         public void CalculatePlaces(List<ParticipantRecord> records)
         {
+            // Командные записи не пересчитываем — у них место уже расставлено по командам
+            bool IsTeamRecord(ParticipantRecord r) =>
+                !string.IsNullOrEmpty(r.Format) &&
+                r.Format.IndexOf("команд", StringComparison.OrdinalIgnoreCase) >= 0;
+
             var finished = records
+                .Where(r => !IsTeamRecord(r))
                 .Where(r => r.Status == "finished" && !string.IsNullOrEmpty(r.OfficialTime))
                 .Select(r => new { Record = r, Time = TryParseTime(r.OfficialTime) })
                 .Where(x => x.Time.HasValue)

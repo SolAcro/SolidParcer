@@ -139,6 +139,16 @@ namespace SolidParcer.Services
                         worksheet.Cells[row, col].Value = "";
                     worksheet.Cells[row, 17].Value = time;   // Результат
                     worksheet.Cells[row, 20].Value = statusDisplay; // Статус
+                                                                    // Команда (только для командной гонки) — в колонку «Комментарий»
+                    if (!string.IsNullOrEmpty(rec.Format) &&
+                        rec.Format.IndexOf("команд", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        worksheet.Cells[row, 22].Value = rec.Category;
+                    }
+                    else
+                    {
+                        worksheet.Cells[row, 22].Value = "";
+                    }
                     row++;
                 }
 

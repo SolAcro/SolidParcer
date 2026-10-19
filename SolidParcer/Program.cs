@@ -35,9 +35,16 @@ class Program
         }
         else if (url.Contains("results.zone"))
         {
-            string basePath = ExtractBasePath(url);
-            paginationHandler = new ResultsZonePaginationHandlerService();
-            pageParser = new ResultsZonePageParserService(paginationHandler, basePath);
+            if (url.Contains("/team_results"))
+            {
+                pageParser = new ResultsZoneTeamPageParserService();
+            }
+            else
+            {
+                string basePath = ExtractBasePath(url);
+                paginationHandler = new ResultsZonePaginationHandlerService();
+                pageParser = new ResultsZonePageParserService(paginationHandler, basePath);
+            }
         }
         else if (url.Contains("tourderussie.ru"))
         {
@@ -131,8 +138,16 @@ class Program
                         }
                         else if (url.Contains("results.zone"))
                         {
-                            wait.Until(drv => drv.FindElements(OpenQA.Selenium.By.CssSelector("a[href*='/races/']")).Count > 0 ||
-                                              drv.FindElements(OpenQA.Selenium.By.CssSelector(".heats_table")).Count > 0);
+                            if (url.Contains("/team_results"))
+                            {
+                                wait.Until(drv => drv.FindElements(
+                                    OpenQA.Selenium.By.CssSelector("section.rz-report-section tbody tr")).Count > 0);
+                            }
+                            else
+                            {
+                                wait.Until(drv => drv.FindElements(OpenQA.Selenium.By.CssSelector("a[href*='/races/']")).Count > 0 ||
+                                                  drv.FindElements(OpenQA.Selenium.By.CssSelector(".heats_table")).Count > 0);
+                            }
                         }
                         else if (url.Contains("racetime.online"))
                         {
